@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mera AI Video Generator</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #f7f7f8; }
+    h1 { font-size: 1.5rem; }
+    label { display: block; margin-top: 16px; font-size: 0.9rem; color: #333; }
+    textarea, select { width: 100%; padding: 10px; font-size: 1rem; box-sizing: border-box; border-radius: 8px; border: 1px solid #ccc; }
+    textarea { height: 100px; }
+    button { margin-top: 12px; padding: 10px 20px; font-size: 1rem; border: none; border-radius: 8px; background: #111; color: #fff; cursor: pointer; }
+    button:disabled { background: #888; cursor: wait; }
+    #status { margin-top: 12px; color: #555; white-space: pre-wrap; }
+    video { width: 100%; margin-top: 16px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>AI Video Generator</h1>
+
+  <label for="prompt">Prompt</label>
+  <textarea id="prompt" placeholder="Jaise: a cat walking on a beach at sunset"></textarea>
+
+  <label for="model">Model</label>
+  <select id="model">
+    <option value="">Auto (sabhi free models try karo)</option>
+  </select>
+
+  <button id="btn">Video banao</button>
+  <p id="status"></p>
+  <video id="player" controls></video>
+
+  <script>
+    const btn = document.getElementById("btn");
+    const promptEl = document.getElementById("prompt");
+    const modelEl = document.getElementById("model");
+    const statusEl = document.getElementById("status");
+    const player = document.getElementById("player");
+
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then(({ models }) => {
+        for (const m of models) {
+          const opt = document.createElement("option");
+          opt.value = m;
+          opt.textContent = m;
+          modelEl.appendChild(opt);
+        }
+      })
+      .catch(() => {});
+
+    btn.addEventListener("click", async () => {
+      const prompt = promptEl.value.trim();
+      if (!prompt) return (statusEl.textContent = "Pehle prompt likhein.");
+
+      btn.disabled = true;
+      player.removeAttribute("src");
+      statusEl.textContent = "Video ban rahi hai... 1-2 minute lag sakte hain, page band na karein.";
+
+      try {
+        const body = { prompt };
+        if (modelEl.value) body.model = modelEl.value;
+
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const detail = err.details ? "\n" + err.details.join("\n") : "";
+          throw new Error((err.error || "Kuch galat ho gaya") + detail);
+        }
+
+        const used = res.headers.get("X-Model-Used");
+        const blob = await res.blob();
+        player.src = URL.createObjectURL(blob);
+        statusEl.textContent = "Ho gaya!" + (used ? ` (Model: ${used})` : "");
+      } catch (e) {
+        statusEl.textContent = "Error: " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
